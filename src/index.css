@@ -228,3 +228,44 @@ body {
 .hud__eye svg {
   pointer-events: none;
 }
+
+.hud__switch-row {
+  margin-top: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 0.9rem;
+  color: #d9e6ff;
+}
+
+.hud__switch {
+  width: 46px;
+  height: 26px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.12);
+  padding: 2px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+.hud__switch-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #f5f8ff;
+  transform: translateX(0);
+  transition: transform 0.2s ease;
+}
+
+.hud__switch.is-on {
+  background: rgba(72, 159, 255, 0.45);
+  border-color: rgba(120, 190, 255, 0.85);
+}
+
+.hud__switch.is-on .hud__switch-thumb {
+  transform: translateX(20px);
+}

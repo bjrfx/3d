@@ -34,7 +34,7 @@ const POSITION_DEADZONE = 0.002;
 const MAX_EXTREME_JUMP = 1.2;
 const PAN_SENSITIVITY = 1;
 const PAN_LERP_ALPHA = 0.25;
-const ZOOM_SENSITIVITY = 52;
+const ZOOM_DEPTH_SENSITIVITY = 95;
 const ZOOM_ORBIT_LERP_ALPHA = 0.22;
 const ORBIT_SENSITIVITY_X = 4.8;
 const ORBIT_SENSITIVITY_Y = 2.8;
@@ -48,6 +48,7 @@ type StageOneState = 'IDLE' | 'HOVER' | 'SELECT' | 'DRAG' | 'RELEASE';
 
 const SceneController = () => {
   const selectedObjectId = useInteractionStore((s) => s.selectedObjectId);
+  const invertLeftPinch = useInteractionStore((s) => s.invertLeftPinch);
   const setSelectedObjectId = useInteractionStore((s) => s.setSelectedObjectId);
   const setInteractionMode = useInteractionStore((s) => s.setInteractionMode);
   const setInteractionState = useInteractionStore((s) => s.setInteractionState);
@@ -63,7 +64,7 @@ const SceneController = () => {
     panStartTarget: new Vector3(),
     pinchStartX: 0,
     pinchStartY: 0,
-    zoomStartPinch: 0,
+    zoomStartHandZ: 0,
     zoomStartDistance: 0,
     orbitStartTheta: 0,
     orbitStartPhi: 0,
@@ -242,7 +243,7 @@ const SceneController = () => {
 
       if (leftNavPinch) {
         if (!cameraNavRef.current.zoomActive) {
-          cameraNavRef.current.zoomStartPinch = left.pinchDistance;
+          cameraNavRef.current.zoomStartHandZ = left.centroid.z;
           cameraNavRef.current.zoomStartDistance = camera.position.distanceTo(cameraTarget);
           cameraNavRef.current.pinchStartX = left.centroid.x;
           cameraNavRef.current.pinchStartY = left.centroid.y;
@@ -253,12 +254,13 @@ const SceneController = () => {
           cameraNavRef.current.orbitTarget.copy(cameraTarget);
           cameraNavRef.current.zoomActive = true;
         } else {
-          const pinchDelta = cameraNavRef.current.zoomStartPinch - left.pinchDistance;
-          const orbitDx = left.centroid.x - cameraNavRef.current.pinchStartX;
-          const orbitDy = left.centroid.y - cameraNavRef.current.pinchStartY;
+          const pinchInvert = invertLeftPinch ? -1 : 1;
+          const depthDelta = (cameraNavRef.current.zoomStartHandZ - left.centroid.z) * pinchInvert;
+          const orbitDx = (left.centroid.x - cameraNavRef.current.pinchStartX) * pinchInvert;
+          const orbitDy = (left.centroid.y - cameraNavRef.current.pinchStartY) * pinchInvert;
           const nextDistance = Math.min(
             MAX_CAMERA_DISTANCE,
-            Math.max(MIN_CAMERA_DISTANCE, cameraNavRef.current.zoomStartDistance - pinchDelta * ZOOM_SENSITIVITY)
+            Math.max(MIN_CAMERA_DISTANCE, cameraNavRef.current.zoomStartDistance - depthDelta * ZOOM_DEPTH_SENSITIVITY)
           );
 
           const nextTheta = cameraNavRef.current.orbitStartTheta - orbitDx * ORBIT_SENSITIVITY_X;

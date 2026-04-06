@@ -8,10 +8,12 @@ export const Overlay = () => {
     selectedObjectId,
     trackerStatus,
     showLandmarkOverlay,
+    invertLeftPinch,
     moveMode,
     interactionMode,
     interactionState,
     toggleLandmarkOverlay,
+    toggleInvertLeftPinch,
     setMoveMode,
   } = useOverlayState();
 
@@ -75,6 +77,24 @@ export const Overlay = () => {
             </div>
           </>
         )}
+      </div>
+
+      <div className="hud__card">
+        <div className="hud__header">
+          <h1>Camera Settings</h1>
+        </div>
+        <div className="hud__switch-row">
+          <span>Invert Left Pinch</span>
+          <button
+            aria-label="Toggle invert left pinch"
+            aria-pressed={invertLeftPinch}
+            className={`hud__switch ${invertLeftPinch ? 'is-on' : ''}`}
+            onClick={toggleInvertLeftPinch}
+            type="button"
+          >
+            <span className="hud__switch-thumb" />
+          </button>
+        </div>
       </div>
 
       <p className="hud__tip">
