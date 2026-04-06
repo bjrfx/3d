@@ -8,6 +8,7 @@ export const Overlay = () => {
     selectedObjectId,
     trackerStatus,
     showLandmarkOverlay,
+    hudVisible,
     invertLeftPinch,
     moveMode,
     interactionMode,
@@ -22,6 +23,10 @@ export const Overlay = () => {
   } = useOverlayState();
 
   const [isOpen, setIsOpen] = useState(false);
+
+  if (!hudVisible) {
+    return null;
+  }
 
   return (
     <div className="hud">

@@ -5,7 +5,7 @@ export type MoveMode = 'relative' | 'absolute';
 export type InteractionMode = 'OBJECT_MODE' | 'CAMERA_MODE';
 export type MenuLifecycle = 'CLOSED' | 'OPENING' | 'OPEN' | 'CLOSING';
 export type LeftMenuStage = 'IDLE' | 'PALM_SHOWN' | 'CONFIRMED';
-export type MenuTarget = 'mesh' | `mesh:${MeshKind}`;
+export type MenuTarget = 'mesh' | `mesh:${MeshKind}` | 'toggle:hud';
 export type MeshKind =
   | 'box'
   | 'capsule'
@@ -32,6 +32,7 @@ interface InteractionState {
   selectedObjectId: string | null;
   trackerStatus: 'loading' | 'ready' | 'error';
   showLandmarkOverlay: boolean;
+  hudVisible: boolean;
   invertLeftPinch: boolean;
   moveMode: MoveMode;
   interactionMode: InteractionMode;
@@ -50,6 +51,7 @@ interface InteractionState {
   setSelectedObjectId: (id: string | null) => void;
   setTrackerStatus: (status: InteractionState['trackerStatus']) => void;
   toggleLandmarkOverlay: () => void;
+  toggleHudVisible: () => void;
   toggleInvertLeftPinch: () => void;
   setMoveMode: (mode: MoveMode) => void;
   setInteractionMode: (mode: InteractionMode) => void;
@@ -73,7 +75,8 @@ export const useInteractionStore = create<InteractionState>((set) => ({
   selectedObjectId: null,
   trackerStatus: 'loading',
   showLandmarkOverlay: true,
-  invertLeftPinch: false,
+  hudVisible: true,
+  invertLeftPinch: true,
   moveMode: 'relative',
   interactionMode: 'CAMERA_MODE',
   interactionState: 'IDLE',
@@ -91,6 +94,7 @@ export const useInteractionStore = create<InteractionState>((set) => ({
   setSelectedObjectId: (selectedObjectId) => set({ selectedObjectId }),
   setTrackerStatus: (trackerStatus) => set({ trackerStatus }),
   toggleLandmarkOverlay: () => set((state) => ({ showLandmarkOverlay: !state.showLandmarkOverlay })),
+  toggleHudVisible: () => set((state) => ({ hudVisible: !state.hudVisible })),
   toggleInvertLeftPinch: () => set((state) => ({ invertLeftPinch: !state.invertLeftPinch })),
   setMoveMode: (moveMode) => set({ moveMode }),
   setInteractionMode: (interactionMode) => set({ interactionMode }),
@@ -134,6 +138,7 @@ export const useOverlayState = () => {
   const selectedObjectId = useInteractionStore((s) => s.selectedObjectId);
   const trackerStatus = useInteractionStore((s) => s.trackerStatus);
   const showLandmarkOverlay = useInteractionStore((s) => s.showLandmarkOverlay);
+  const hudVisible = useInteractionStore((s) => s.hudVisible);
   const invertLeftPinch = useInteractionStore((s) => s.invertLeftPinch);
   const moveMode = useInteractionStore((s) => s.moveMode);
   const interactionMode = useInteractionStore((s) => s.interactionMode);
@@ -143,6 +148,7 @@ export const useOverlayState = () => {
   const menuSubmenuOpen = useInteractionStore((s) => s.menuSubmenuOpen);
   const selectedMeshKind = useInteractionStore((s) => s.selectedMeshKind);
   const toggleLandmarkOverlay = useInteractionStore((s) => s.toggleLandmarkOverlay);
+  const toggleHudVisible = useInteractionStore((s) => s.toggleHudVisible);
   const toggleInvertLeftPinch = useInteractionStore((s) => s.toggleInvertLeftPinch);
   const setMoveMode = useInteractionStore((s) => s.setMoveMode);
 
@@ -152,6 +158,7 @@ export const useOverlayState = () => {
     selectedObjectId,
     trackerStatus,
     showLandmarkOverlay,
+    hudVisible,
     invertLeftPinch,
     moveMode,
     interactionMode,
@@ -161,6 +168,7 @@ export const useOverlayState = () => {
     menuSubmenuOpen,
     selectedMeshKind,
     toggleLandmarkOverlay,
+    toggleHudVisible,
     toggleInvertLeftPinch,
     setMoveMode,
   };

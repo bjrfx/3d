@@ -49,6 +49,7 @@ export const FloatingMenu = () => {
   const menuHoldProgress = useInteractionStore((s) => s.menuHoldProgress);
   const menuSubmenuOpen = useInteractionStore((s) => s.menuSubmenuOpen);
   const selectedMeshKind = useInteractionStore((s) => s.selectedMeshKind);
+  const hudVisible = useInteractionStore((s) => s.hudVisible);
 
   const meshButtonRef = useRef<HTMLButtonElement | null>(null);
   const committedInPinchRef = useRef(false);
@@ -124,6 +125,7 @@ export const FloatingMenu = () => {
       const hovered = (targetEl?.dataset.menuTarget as MenuTarget | undefined) ?? null;
       const hoveredMeshTrigger = hovered === 'mesh';
       const hoveredMeshItem = hovered?.startsWith('mesh:') ?? false;
+      const hoveredHudToggle = hovered === 'toggle:hud';
 
       if (hovered !== ui.menuHoveredTarget) {
         ui.setMenuHoveredTarget(hovered);
@@ -155,6 +157,41 @@ export const FloatingMenu = () => {
         }
 
         committedInPinchRef.current = false;
+        frame = requestAnimationFrame(tick);
+        return;
+      }
+
+      if (hoveredHudToggle) {
+        if (!pinchActive) {
+          if (ui.menuHoldTarget) {
+            ui.cancelMenuHold();
+          }
+          committedInPinchRef.current = false;
+          frame = requestAnimationFrame(tick);
+          return;
+        }
+
+        if (committedInPinchRef.current) {
+          frame = requestAnimationFrame(tick);
+          return;
+        }
+
+        if (!ui.menuHoldTarget || ui.menuHoldTarget !== 'toggle:hud' || !ui.menuHoldStartedAt) {
+          ui.beginMenuHold('toggle:hud', performance.now());
+          frame = requestAnimationFrame(tick);
+          return;
+        }
+
+        const elapsed = performance.now() - ui.menuHoldStartedAt;
+        const progress = clamp(elapsed / HOLD_MS_ITEM, 0, 1);
+        ui.updateMenuHoldProgress(progress);
+
+        if (progress >= 1) {
+          ui.toggleHudVisible();
+          committedInPinchRef.current = true;
+          ui.cancelMenuHold();
+        }
+
         frame = requestAnimationFrame(tick);
         return;
       }
@@ -229,6 +266,31 @@ export const FloatingMenu = () => {
             <span className="floating-menu__hold" style={{ '--hold-progress': String(menuHoldProgress) } as CSSProperties} />
           )}
         </button>
+
+        <div
+          className={[
+            'floating-menu__toggle-row',
+            menuHoveredTarget === 'toggle:hud' ? 'is-hovered' : '',
+          ]
+            .filter(Boolean)
+            .join(' ')}
+          data-menu-target="toggle:hud"
+        >
+          <span className="floating-menu__toggle-label">Show HUD</span>
+          <span
+            className={[
+              'floating-menu__switch',
+              hudVisible ? 'is-on' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            <span className="floating-menu__switch-thumb" />
+          </span>
+          {menuHoldTarget === 'toggle:hud' && (
+            <span className="floating-menu__hold" style={{ '--hold-progress': String(menuHoldProgress) } as CSSProperties} />
+          )}
+        </div>
       </aside>
 
       <aside
