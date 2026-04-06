@@ -54,10 +54,12 @@ export const handToNdc = (hand: HandData, out = ndc): Vector2 => {
   return out;
 };
 
-export const rayFromHand = (camera: Camera, hand: HandData): Ray => {
+export const rayFromHand = (camera: Camera, hand: HandData, pointerSensitivity = 1): Ray => {
   const coords = handToNdc(hand);
+  const scaledX = MathUtils.clamp(coords.x * pointerSensitivity, -1, 1);
+  const scaledY = MathUtils.clamp(coords.y * pointerSensitivity, -1, 1);
   origin.setFromMatrixPosition(camera.matrixWorld);
-  direction.set(coords.x, coords.y, 0.5).unproject(camera).sub(origin).normalize();
+  direction.set(scaledX, scaledY, 0.5).unproject(camera).sub(origin).normalize();
   ray.set(origin, direction);
   return ray;
 };

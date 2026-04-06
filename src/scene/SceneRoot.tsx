@@ -42,6 +42,7 @@ const MIN_POLAR_ANGLE = 0.2;
 const MAX_POLAR_ANGLE = Math.PI * 0.48;
 const MIN_CAMERA_DISTANCE = 6;
 const MAX_CAMERA_DISTANCE = 22;
+const RIGHT_SELECTOR_SENSITIVITY = 2.20;
 
 type StageOneState = 'IDLE' | 'HOVER' | 'SELECT' | 'DRAG' | 'RELEASE';
 
@@ -145,7 +146,7 @@ const SceneController = () => {
   };
 
   const raycastObjectFromHand = (rightHand: NonNullable<typeof trackingRuntime.hands.right>) => {
-    const handRay = rayFromHand(camera, rightHand);
+    const handRay = rayFromHand(camera, rightHand, RIGHT_SELECTOR_SENSITIVITY);
     raycaster.ray.copy(handRay);
 
     rayDirectionPoint.copy(getRayDebugPoint(5, rayDirectionPoint));
