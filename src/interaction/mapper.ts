@@ -12,7 +12,8 @@ const ray = new Ray();
 const planeAnchor = new Vector3();
 const worldDelta = new Vector3();
 
-const DEPTH_SENSITIVITY = 15;
+const OBJECT_DEPTH_SENSITIVITY = 90;
+const OBJECT_DEPTH_DEADZONE = 0.0035;
 
 export interface DragContext {
   active: boolean;
@@ -140,8 +141,12 @@ export const computeDragTarget = (
   worldDelta.copy(drag.handWorld).sub(drag.grabStartHand);
   const deltaRight = worldDelta.dot(drag.cameraRight);
   const deltaUp = worldDelta.dot(drag.cameraUp);
-  const depthDelta = drag.initialHandZ - hand.centroid.z;
-  const depthOffset = depthDelta * DEPTH_SENSITIVITY;
+  const rawDepthDelta = drag.initialHandZ - hand.centroid.z;
+  const depthDelta =
+    Math.abs(rawDepthDelta) < OBJECT_DEPTH_DEADZONE
+      ? 0
+      : rawDepthDelta - Math.sign(rawDepthDelta) * OBJECT_DEPTH_DEADZONE;
+  const depthOffset = depthDelta * OBJECT_DEPTH_SENSITIVITY;
 
   outTarget.copy(drag.grabStartObject);
   outTarget.addScaledVector(drag.cameraRight, deltaRight);
