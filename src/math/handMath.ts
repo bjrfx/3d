@@ -74,3 +74,50 @@ export const emaLandmarks = (
 
   return out;
 };
+
+export interface Vec3 {
+  x: number;
+  y: number;
+  z: number;
+}
+
+const sub = (a: Landmark, b: Landmark): Vec3 => ({ x: a.x - b.x, y: a.y - b.y, z: a.z - b.z });
+
+const cross = (a: Vec3, b: Vec3): Vec3 => ({
+  x: a.y * b.z - a.z * b.y,
+  y: a.z * b.x - a.x * b.z,
+  z: a.x * b.y - a.y * b.x,
+});
+
+const dot = (a: Vec3, b: Vec3): number => a.x * b.x + a.y * b.y + a.z * b.z;
+
+const length = (v: Vec3): number => Math.sqrt(v.x * v.x + v.y * v.y + v.z * v.z);
+
+export const normalize = (v: Vec3): Vec3 => {
+  const len = length(v);
+  if (len <= 1e-6) {
+    return { x: 0, y: 0, z: 0 };
+  }
+  const inv = 1 / len;
+  return { x: v.x * inv, y: v.y * inv, z: v.z * inv };
+};
+
+export const palmNormal = (landmarks: Landmark[]): Vec3 | null => {
+  if (landmarks.length < 18) {
+    return null;
+  }
+
+  const wrist = landmarks[0];
+  const indexMcp = landmarks[5];
+  const pinkyMcp = landmarks[17];
+  const toIndex = sub(indexMcp, wrist);
+  const toPinky = sub(pinkyMcp, wrist);
+  return normalize(cross(toIndex, toPinky));
+};
+
+export const angleBetweenVec3 = (a: Vec3, b: Vec3): number => {
+  const na = normalize(a);
+  const nb = normalize(b);
+  const cosine = clamp(dot(na, nb), -1, 1);
+  return Math.acos(cosine);
+};

@@ -1,10 +1,10 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Intersection, Mesh, Object3D, Plane, Raycaster, Spherical, Vector3 } from 'three';
 import { useInteractionStore, type InteractionStateLabel } from '../stores/interactionStore';
 import { trackingRuntime } from '../tracking/runtime';
-import { InteractiveObject } from './InteractiveObject';
+import { getMeshYOffset, InteractiveObject } from './InteractiveObject';
 import {
   applySmoothedDrag,
   beginGrab,
@@ -14,6 +14,7 @@ import {
   getRayDebugPoint,
   rayFromHand,
 } from '../interaction/mapper';
+import { angleBetweenVec3, isHandOpen, palmNormal, type Vec3 } from '../math/handMath';
 
 const raycaster = new Raycaster();
 const smoothTarget = new Vector3();
@@ -28,6 +29,8 @@ const cameraDesiredPosition = new Vector3();
 const cameraDesiredTarget = new Vector3();
 const orbitOffset = new Vector3();
 const orbitSpherical = new Spherical();
+const placementGroundPlane = new Plane(new Vector3(0, 1, 0), 0);
+const placementHitPoint = new Vector3();
 
 const POSITION_LERP_ALPHA = 0.2;
 const POSITION_DEADZONE = 0.002;
@@ -43,15 +46,39 @@ const MAX_POLAR_ANGLE = Math.PI * 0.48;
 const MIN_CAMERA_DISTANCE = 6;
 const MAX_CAMERA_DISTANCE = 22;
 const RIGHT_SELECTOR_SENSITIVITY = 2.20;
+const LEFT_CONFIRM_TIMEOUT_MS = 900;
+const MENU_OPENING_DURATION_MS = 140;
+const MENU_CLOSING_DURATION_MS = 220;
+const LEFT_PALM_WEBCAM_FACING_Z = 0.06;
+const LEFT_ROTATION_CONFIRM_RAD = 0.62;
+const LEFT_ROTATION_MAINTAIN_RAD = 0.42;
+const LEFT_TOWARD_SELF_Z_DELTA_CONFIRM = 0.1;
+const LEFT_TOWARD_SELF_Z_DELTA_MAINTAIN = 0.05;
+const LEFT_SIDEWAYS_CLOSE_Z_ABS = 0.14;
 
 type StageOneState = 'IDLE' | 'HOVER' | 'SELECT' | 'DRAG' | 'RELEASE';
+
+interface PlacedMesh {
+  id: string;
+  kind: 'box' | 'capsule' | 'circle' | 'cylinder' | 'dodecahedron' | 'icosahedron' | 'lathe' | 'octahedron' | 'plane' | 'ring' | 'sphere' | 'sprite' | 'tetrahedron' | 'torus' | 'torusknot' | 'tube';
+  position: [number, number, number];
+}
 
 const SceneController = () => {
   const selectedObjectId = useInteractionStore((s) => s.selectedObjectId);
   const invertLeftPinch = useInteractionStore((s) => s.invertLeftPinch);
+  const menuLifecycle = useInteractionStore((s) => s.menuLifecycle);
+  const leftMenuStage = useInteractionStore((s) => s.leftMenuStage);
+  const sceneInputLocked = useInteractionStore((s) => s.sceneInputLocked);
+  const selectedMeshKind = useInteractionStore((s) => s.selectedMeshKind);
   const setSelectedObjectId = useInteractionStore((s) => s.setSelectedObjectId);
   const setInteractionMode = useInteractionStore((s) => s.setInteractionMode);
   const setInteractionState = useInteractionStore((s) => s.setInteractionState);
+  const startMenuOpening = useInteractionStore((s) => s.startMenuOpening);
+  const confirmMenuOpen = useInteractionStore((s) => s.confirmMenuOpen);
+  const startMenuClosing = useInteractionStore((s) => s.startMenuClosing);
+  const finishMenuClosed = useInteractionStore((s) => s.finishMenuClosed);
+  const setLeftMenuStage = useInteractionStore((s) => s.setLeftMenuStage);
 
   const { camera, scene } = useThree();
   const controlsRef = useRef<any>(null);
@@ -80,6 +107,19 @@ const SceneController = () => {
   const lastUiStateRef = useRef<InteractionStateLabel>('IDLE');
   const lastModeRef = useRef<'OBJECT_MODE' | 'CAMERA_MODE'>('CAMERA_MODE');
   const lastDebugKeyRef = useRef('');
+  const leftMenuRef = useRef<{
+    baselineNormal: Vec3 | null;
+    stageStartedAt: number;
+    openingStartedAt: number | null;
+    closingStartedAt: number | null;
+  }>({ baselineNormal: null, stageStartedAt: 0, openingStartedAt: null, closingStartedAt: null });
+  const nextPlacedIdRef = useRef(3);
+  const placementPinchPrevRef = useRef(false);
+  const [previewPosition, setPreviewPosition] = useState<[number, number, number]>([0, getMeshYOffset('box'), 0]);
+  const [placedMeshes, setPlacedMeshes] = useState<PlacedMesh[]>([
+    { id: 'mesh-1', kind: 'box', position: [-1.8, getMeshYOffset('box'), 0] },
+    { id: 'mesh-2', kind: 'sphere', position: [1.8, getMeshYOffset('sphere'), 0] },
+  ]);
 
   const registerObject = (id: string, mesh: Mesh) => {
     objectRefs.current[id] = mesh;
@@ -179,6 +219,7 @@ const SceneController = () => {
   };
 
   useFrame(() => {
+    const now = performance.now();
     const left = trackingRuntime.hands.left;
     const right = trackingRuntime.hands.right;
     const leftState = trackingRuntime.gestures.left;
@@ -186,9 +227,83 @@ const SceneController = () => {
     const pinchActive = rightState === 'PINCH' || rightState === 'TRANSFORM';
     const grabActive = rightState === 'GRAB';
     const leftActive = leftState === 'PINCH' || leftState === 'GRAB' || leftState === 'TRANSFORM';
-    const leftNavGrab = Boolean(left && leftState === 'GRAB');
-    const leftNavPinch = Boolean(left && (leftState === 'PINCH' || leftState === 'TRANSFORM'));
+    const leftNavGrab = !sceneInputLocked && Boolean(left && leftState === 'GRAB');
+    const leftNavPinch = !sceneInputLocked && Boolean(left && (leftState === 'PINCH' || leftState === 'TRANSFORM'));
     const noHandsActive = !pinchActive && !grabActive && !leftActive;
+    const leftOpenPalm = Boolean(left && isHandOpen(left.landmarks));
+    const leftNormal = left ? palmNormal(left.landmarks) : null;
+
+    if (menuLifecycle === 'OPENING' && leftMenuRef.current.openingStartedAt && now - leftMenuRef.current.openingStartedAt >= MENU_OPENING_DURATION_MS) {
+      confirmMenuOpen();
+      leftMenuRef.current.openingStartedAt = null;
+    }
+
+    if (menuLifecycle === 'CLOSING' && leftMenuRef.current.closingStartedAt && now - leftMenuRef.current.closingStartedAt >= MENU_CLOSING_DURATION_MS) {
+      finishMenuClosed();
+      leftMenuRef.current.closingStartedAt = null;
+      leftMenuRef.current.baselineNormal = null;
+    }
+
+    const beginOpenLifecycle = () => {
+      if (menuLifecycle === 'OPEN' || menuLifecycle === 'OPENING') {
+        return;
+      }
+      startMenuOpening();
+      leftMenuRef.current.openingStartedAt = now;
+      leftMenuRef.current.closingStartedAt = null;
+    };
+
+    const beginCloseLifecycle = () => {
+      if (menuLifecycle === 'CLOSED' || menuLifecycle === 'CLOSING') {
+        return;
+      }
+      startMenuClosing();
+      leftMenuRef.current.closingStartedAt = now;
+      leftMenuRef.current.openingStartedAt = null;
+    };
+
+    if (leftOpenPalm && leftNormal) {
+      if (leftMenuStage === 'IDLE') {
+        if (leftNormal.z >= LEFT_PALM_WEBCAM_FACING_Z) {
+          leftMenuRef.current.baselineNormal = leftNormal;
+          leftMenuRef.current.stageStartedAt = now;
+          setLeftMenuStage('PALM_SHOWN');
+        }
+      } else if (leftMenuStage === 'PALM_SHOWN') {
+        if (now - leftMenuRef.current.stageStartedAt > LEFT_CONFIRM_TIMEOUT_MS) {
+          leftMenuRef.current.baselineNormal = null;
+          setLeftMenuStage('IDLE');
+        } else if (leftMenuRef.current.baselineNormal) {
+          const towardSelfDelta = leftMenuRef.current.baselineNormal.z - leftNormal.z;
+          const rotation = angleBetweenVec3(leftMenuRef.current.baselineNormal, leftNormal);
+          if (rotation >= LEFT_ROTATION_CONFIRM_RAD && towardSelfDelta >= LEFT_TOWARD_SELF_Z_DELTA_CONFIRM) {
+            setLeftMenuStage('CONFIRMED');
+            beginOpenLifecycle();
+          }
+        }
+      } else if (leftMenuStage === 'CONFIRMED') {
+        if (leftMenuRef.current.baselineNormal) {
+          const towardSelfDelta = leftMenuRef.current.baselineNormal.z - leftNormal.z;
+          const sidewaysFacing = Math.abs(leftNormal.z) <= LEFT_SIDEWAYS_CLOSE_Z_ABS;
+          const rotation = angleBetweenVec3(leftMenuRef.current.baselineNormal, leftNormal);
+          if (
+            rotation < LEFT_ROTATION_MAINTAIN_RAD ||
+            towardSelfDelta < LEFT_TOWARD_SELF_Z_DELTA_MAINTAIN ||
+            sidewaysFacing
+          ) {
+            setLeftMenuStage('IDLE');
+            leftMenuRef.current.baselineNormal = null;
+            beginCloseLifecycle();
+          } else {
+            beginOpenLifecycle();
+          }
+        }
+      }
+    } else if (leftMenuStage !== 'IDLE') {
+      setLeftMenuStage('IDLE');
+      leftMenuRef.current.baselineNormal = null;
+      beginCloseLifecycle();
+    }
 
     let activeSelectedId = selectedObjectId;
     let activeSelected = activeSelectedId ? objectRefs.current[activeSelectedId] : null;
@@ -286,6 +401,67 @@ const SceneController = () => {
       cameraNavRef.current.panActive = false;
       cameraNavRef.current.zoomActive = false;
     }
+
+    if (sceneInputLocked) {
+      hoverFramesRef.current = 0;
+      stageStateRef.current = 'IDLE';
+      setRayDebugPoint(null);
+      endGrab(dragRef.current);
+      updateUiMode('CAMERA_MODE');
+      updateUiState(stageStateRef.current);
+      prevPinchRef.current = pinchActive;
+      prevGrabRef.current = grabActive;
+      return;
+    }
+
+    const placementModeActive = Boolean(selectedMeshKind && menuLifecycle === 'CLOSED');
+    if (placementModeActive) {
+      if (right && selectedMeshKind) {
+        const placeRay = rayFromHand(camera, right, RIGHT_SELECTOR_SENSITIVITY);
+        if (placeRay.intersectPlane(placementGroundPlane, placementHitPoint)) {
+          const targetY = getMeshYOffset(selectedMeshKind);
+          setPreviewPosition((prev) => {
+            const nextX = placementHitPoint.x;
+            const nextY = targetY;
+            const nextZ = placementHitPoint.z;
+            const dx = Math.abs(prev[0] - nextX);
+            const dy = Math.abs(prev[1] - nextY);
+            const dz = Math.abs(prev[2] - nextZ);
+            if (dx < 0.002 && dy < 0.002 && dz < 0.002) {
+              return prev;
+            }
+            return [nextX, nextY, nextZ];
+          });
+        }
+      }
+
+      const placePinchActive = pinchActive;
+      const placePinchStart = placePinchActive && !placementPinchPrevRef.current;
+      if (placePinchStart && selectedMeshKind) {
+        const nextId = `mesh-${nextPlacedIdRef.current}`;
+        nextPlacedIdRef.current += 1;
+        setPlacedMeshes((prev) => [
+          ...prev,
+          {
+            id: nextId,
+            kind: selectedMeshKind,
+            position: [previewPosition[0], previewPosition[1], previewPosition[2]],
+          },
+        ]);
+      }
+      placementPinchPrevRef.current = placePinchActive;
+
+      hoverFramesRef.current = 0;
+      stageStateRef.current = 'IDLE';
+      setRayDebugPoint(null);
+      endGrab(dragRef.current);
+      updateUiMode('CAMERA_MODE');
+      updateUiState(stageStateRef.current);
+      prevPinchRef.current = pinchActive;
+      prevGrabRef.current = grabActive;
+      return;
+    }
+    placementPinchPrevRef.current = false;
 
     const hoverHit = right ? raycastObjectFromHand(right) : { id: null, mesh: null, hitCount: 0 };
     if (hoverHit.id) {
@@ -432,20 +608,26 @@ const SceneController = () => {
       <Text position={[0, 0.18, 5.5]} fontSize={0.24} color="#4fa5ff" anchorX="center" anchorY="middle">
         Z
       </Text>
-      <InteractiveObject
-        id="cube"
-        kind="cube"
-        position={[-1.8, 1, 0]}
-        selected={selectedObjectId === 'cube'}
-        onReady={registerObject}
-      />
-      <InteractiveObject
-        id="sphere"
-        kind="sphere"
-        position={[1.8, 1, 0]}
-        selected={selectedObjectId === 'sphere'}
-        onReady={registerObject}
-      />
+      {selectedMeshKind && menuLifecycle === 'CLOSED' && (
+        <InteractiveObject
+          id="preview-mesh"
+          kind={selectedMeshKind}
+          position={previewPosition}
+          selected={false}
+          preview
+          onReady={registerObject}
+        />
+      )}
+      {placedMeshes.map((item) => (
+        <InteractiveObject
+          key={item.id}
+          id={item.id}
+          kind={item.kind}
+          position={item.position}
+          selected={selectedObjectId === item.id}
+          onReady={registerObject}
+        />
+      ))}
       <mesh ref={rayHitDebugRef} visible={false}>
         <sphereGeometry args={[0.06]} />
         <meshBasicMaterial color="#ff2d55" />

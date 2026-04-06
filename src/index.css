@@ -30,6 +30,233 @@ body {
   position: relative;
 }
 
+.floating-menu {
+  --menu-bg: rgba(21, 22, 25, 0.46);
+  --menu-border: rgba(255, 255, 255, 0.22);
+  --menu-glow: rgba(224, 242, 255, 0.38);
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 248px;
+  border-radius: 26px;
+  border: 1px solid var(--menu-border);
+  background: linear-gradient(155deg, rgba(246, 249, 255, 0.2), var(--menu-bg));
+  backdrop-filter: blur(16px);
+  box-shadow:
+    0 18px 48px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  padding: 14px;
+  opacity: 0;
+  transform: translate(-50%, -50%) translateY(18px) scale(0.94);
+  transition: opacity 0.22s ease, transform 0.26s ease;
+  z-index: 20;
+  pointer-events: none;
+}
+
+.floating-menu.is-open {
+  opacity: 1;
+  transform: translate(-50%, -50%) translateY(0) scale(1);
+  pointer-events: auto;
+}
+
+.floating-menu.is-closing {
+  opacity: 0;
+  transform: translate(-50%, -50%) translateY(10px) scale(0.97);
+}
+
+.floating-menu__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.floating-menu__eyebrow {
+  margin: 0;
+  color: rgba(236, 245, 255, 0.92);
+  letter-spacing: 0.03em;
+  font-size: 0.84rem;
+}
+
+.floating-menu__item {
+  position: relative;
+  width: 100%;
+  border: 1px solid rgba(223, 241, 255, 0.28);
+  border-radius: 17px;
+  background: linear-gradient(160deg, rgba(31, 46, 66, 0.58), rgba(16, 25, 40, 0.62));
+  color: #ecf3ff;
+  min-height: 58px;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 14px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
+  overflow: hidden;
+}
+
+.floating-menu__item.is-hovered,
+.floating-menu__item.is-active {
+  border-color: rgba(236, 249, 255, 0.82);
+  box-shadow: 0 9px 24px rgba(130, 214, 255, 0.2);
+  filter: brightness(1.12);
+  transform: scale(1.05);
+}
+
+.floating-menu__chevron {
+  color: rgba(223, 241, 255, 0.9);
+  font-size: 1.05rem;
+}
+
+.floating-menu__hold,
+.floating-submenu__hold {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(123, 213, 255, 0.26), rgba(192, 237, 255, 0.35));
+  transform-origin: left;
+  transform: scaleX(var(--hold-progress, 0));
+  transition: transform 0.08s linear;
+  pointer-events: none;
+}
+
+.floating-submenu {
+  position: fixed;
+  transform: translate(10px, -50%) scale(0.96);
+  width: 252px;
+  max-height: min(72vh, 620px);
+  overflow-y: auto;
+  background: linear-gradient(160deg, rgba(26, 32, 46, 0.66), rgba(15, 21, 34, 0.72));
+  border: 1px solid rgba(232, 243, 255, 0.24);
+  border-radius: 22px;
+  box-shadow:
+    0 18px 52px rgba(0, 0, 0, 0.34),
+    inset 0 1px 0 rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(14px);
+  opacity: 0;
+  transition: opacity 0.2s ease, transform 0.24s ease;
+  pointer-events: none;
+  z-index: 22;
+  padding: 9px;
+}
+
+.floating-submenu.is-open {
+  opacity: 1;
+  transform: translate(0, -50%) scale(1);
+  pointer-events: auto;
+}
+
+.floating-submenu.is-closing {
+  opacity: 0;
+  transform: translate(6px, -50%) scale(0.98);
+}
+
+.floating-submenu__item {
+  position: relative;
+  width: 100%;
+  text-align: left;
+  border: 1px solid rgba(216, 236, 255, 0.2);
+  border-radius: 14px;
+  background: rgba(29, 40, 59, 0.5);
+  color: #e9f2ff;
+  padding: 10px 12px;
+  font-size: 0.93rem;
+  margin-bottom: 8px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease, border-color 0.2s ease;
+  overflow: hidden;
+}
+
+.floating-submenu__item:last-child {
+  margin-bottom: 0;
+}
+
+.floating-submenu__item.is-hovered {
+  transform: scale(1.05);
+  filter: brightness(1.12);
+  border-color: rgba(229, 245, 255, 0.84);
+  box-shadow: 0 8px 20px rgba(136, 211, 255, 0.2);
+}
+
+.floating-submenu__item.is-selected {
+  border-color: rgba(184, 231, 255, 0.92);
+  background: linear-gradient(165deg, rgba(83, 155, 205, 0.54), rgba(50, 119, 171, 0.4));
+}
+
+.floating-cursor {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(173, 232, 255, 0.96);
+  background: rgba(102, 205, 255, 0.34);
+  box-shadow: 0 0 0 5px rgba(102, 205, 255, 0.14), 0 0 18px rgba(145, 226, 255, 0.44);
+  position: fixed;
+  transform: translate(-50%, -50%) scale(0.85);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform 0.16s ease, opacity 0.16s ease;
+  z-index: 30;
+}
+
+.floating-cursor.is-visible {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.selected-mesh-tooltip {
+  position: absolute;
+  top: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(238, 247, 255, 0.22);
+  background: rgba(12, 17, 28, 0.42);
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.22);
+  z-index: 26;
+}
+
+.selected-mesh-tooltip__label {
+  color: rgba(232, 241, 255, 0.92);
+  font-size: 0.85rem;
+  letter-spacing: 0.02em;
+}
+
+.selected-mesh-tooltip__clear {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid rgba(238, 247, 255, 0.24);
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(240, 246, 255, 0.9);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  overflow: hidden;
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.selected-mesh-tooltip__clear.is-hovered {
+  transform: scale(1.05);
+  border-color: rgba(245, 252, 255, 0.8);
+  box-shadow: 0 0 0 3px rgba(142, 211, 255, 0.2);
+}
+
+.selected-mesh-tooltip__clear-fill {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(90deg, rgba(105, 192, 255, 0.32), rgba(181, 230, 255, 0.38));
+  transform-origin: left;
+  transform: scaleX(var(--clear-progress, 0));
+  transition: transform 0.08s linear;
+  pointer-events: none;
+}
+
 .landmark-canvas {
   position: absolute;
   top: 18px;
@@ -99,6 +326,22 @@ body {
 }
 
 @media (max-width: 900px) {
+  .floating-menu {
+    top: 50%;
+    left: 50%;
+    width: 216px;
+  }
+
+  .floating-submenu {
+    width: 212px;
+    max-height: 58vh;
+  }
+
+  .selected-mesh-tooltip {
+    top: 12px;
+    max-width: calc(100vw - 24px);
+  }
+
   .landmark-canvas {
     width: min(42vw, 260px);
     top: 12px;

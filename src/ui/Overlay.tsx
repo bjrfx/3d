@@ -12,12 +12,16 @@ export const Overlay = () => {
     moveMode,
     interactionMode,
     interactionState,
+    menuLifecycle,
+    leftMenuStage,
+    menuSubmenuOpen,
+    selectedMeshKind,
     toggleLandmarkOverlay,
     toggleInvertLeftPinch,
     setMoveMode,
   } = useOverlayState();
 
-  const [isOpen, setIsOpen] = useState(true);
+  const [isOpen, setIsOpen] = useState(false);
 
   return (
     <div className="hud">
@@ -59,6 +63,10 @@ export const Overlay = () => {
             <p>Selected: {selectedObjectId ?? 'None'}</p>
             <p>Mode: {interactionMode}</p>
             <p>State: {interactionState}</p>
+            <p>Menu: {menuLifecycle}</p>
+            <p>Left Menu Stage: {leftMenuStage}</p>
+            <p>Submenu: {menuSubmenuOpen ? 'Open' : 'Closed'}</p>
+            <p>Mesh Kind: {selectedMeshKind ?? 'None'}</p>
             <p>Status: {trackerStatus}</p>
 
             <div className="hud__controls">
