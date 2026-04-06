@@ -22,8 +22,8 @@ export class GestureEngine {
     rightGrab: boolean,
     bothPresent: boolean
   ): { left: GestureState; right: GestureState } {
-    this.left = this.advance(this.left, leftLandmarks, leftPinch, leftGrab, bothPresent);
-    this.right = this.advance(this.right, rightLandmarks, rightPinch, rightGrab, bothPresent);
+    this.left = this.advance(this.left, leftLandmarks, leftPinch, leftGrab);
+    this.right = this.advance(this.right, rightLandmarks, rightPinch, rightGrab);
 
     if (bothPresent && this.left.state === 'PINCH' && this.right.state === 'PINCH') {
       this.left.state = 'TRANSFORM';
@@ -33,16 +33,11 @@ export class GestureEngine {
     return { left: this.left.state, right: this.right.state };
   }
 
-  private isActive(state: GestureState): boolean {
-    return state === 'PINCH' || state === 'GRAB' || state === 'TRANSFORM';
-  }
-
   private advance(
     current: InternalState,
     landmarks: Landmark[] | null,
     isPinching: boolean,
-    isGrabbing: boolean,
-    bothPresent: boolean
+    isGrabbing: boolean
   ): InternalState {
     if (!landmarks) {
       return { state: 'IDLE', openFrames: 0 };
@@ -59,7 +54,7 @@ export class GestureEngine {
     }
 
     if (isPinching) {
-      next.state = bothPresent && this.isActive(current.state) ? 'TRANSFORM' : 'PINCH';
+      next.state = 'PINCH';
       next.openFrames = 0;
       return next;
     }

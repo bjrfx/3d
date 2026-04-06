@@ -181,17 +181,17 @@ const SceneController = () => {
     const right = trackingRuntime.hands.right;
     const leftState = trackingRuntime.gestures.left;
     const rightState = trackingRuntime.gestures.right;
-    const pinchActive = rightState === 'PINCH';
+    const pinchActive = rightState === 'PINCH' || rightState === 'TRANSFORM';
     const grabActive = rightState === 'GRAB';
     const leftActive = leftState === 'PINCH' || leftState === 'GRAB' || leftState === 'TRANSFORM';
     const leftNavGrab = Boolean(left && leftState === 'GRAB');
-    const leftNavPinch = Boolean(left && leftState === 'PINCH');
+    const leftNavPinch = Boolean(left && (leftState === 'PINCH' || leftState === 'TRANSFORM'));
     const noHandsActive = !pinchActive && !grabActive && !leftActive;
 
     let activeSelectedId = selectedObjectId;
     let activeSelected = activeSelectedId ? objectRefs.current[activeSelectedId] : null;
 
-    const cameraNavActive = !activeSelected && (leftNavGrab || leftNavPinch);
+    const cameraNavActive = leftNavGrab || leftNavPinch;
 
     if (!activeSelected && (noHandsActive || cameraNavActive)) {
       updateUiMode('CAMERA_MODE');
@@ -203,7 +203,7 @@ const SceneController = () => {
       controlsRef.current.enabled = !cameraNavActive;
     }
 
-    if (!activeSelected && left && cameraNavActive) {
+    if (left && cameraNavActive) {
       const controlsTarget = controlsRef.current?.target ?? cameraTarget.set(0, 0, 0);
       cameraTarget.copy(controlsTarget);
 
@@ -279,11 +279,6 @@ const SceneController = () => {
         cameraNavRef.current.zoomActive = false;
       }
 
-      stageStateRef.current = 'IDLE';
-      updateUiState('IDLE');
-      prevPinchRef.current = pinchActive;
-      prevGrabRef.current = grabActive;
-      return;
     } else {
       cameraNavRef.current.panActive = false;
       cameraNavRef.current.zoomActive = false;
