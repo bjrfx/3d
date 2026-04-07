@@ -2,6 +2,9 @@ import { useMemo, useRef } from 'react';
 import { Text } from '@react-three/drei';
 import { CatmullRomCurve3, Color, Mesh, MeshStandardMaterial, Vector2, Vector3 } from 'three';
 import type { MeshKind } from '../stores/interactionStore';
+import { RigidBody, type RapierRigidBody } from '@react-three/rapier';
+import type { PhysicsMaterial } from '../physics/types';
+import { createColliderForKind } from '../physics/colliderFactory';
 
 interface InteractiveObjectProps {
   id: string;
@@ -14,7 +17,10 @@ interface InteractiveObjectProps {
   opacity?: number;
   visible?: boolean;
   preview?: boolean;
+  physics?: PhysicsMaterial;
+  kinematic?: boolean;
   onReady: (id: string, mesh: Mesh) => void;
+  onRigidBodyReady?: (id: string, body: RapierRigidBody) => void;
 }
 
 export const getMeshYOffset = (kind: MeshKind): number => {
@@ -136,14 +142,22 @@ export const InteractiveObject = ({
   opacity = 1,
   visible = true,
   preview = false,
+  physics,
+  kinematic = false,
   onReady,
+  onRigidBodyReady,
 }: InteractiveObjectProps) => {
   const meshRef = useRef<Mesh>(null);
+  const rigidBodyRef = useRef<RapierRigidBody>(null);
   const baseColor = useMemo(() => new Color(color ?? defaultMeshColor(kind)), [color, kind]);
 
   const register = () => {
     if (meshRef.current) {
       onReady(id, meshRef.current);
+    }
+
+    if (rigidBodyRef.current && onRigidBodyReady) {
+      onRigidBodyReady(id, rigidBodyRef.current);
     }
   };
 
@@ -160,11 +174,11 @@ export const InteractiveObject = ({
     return m;
   }, [baseColor, opacity, preview, selected]);
 
-  return (
+  const meshNode = (
     <mesh
       ref={meshRef}
-      position={position}
-      rotation={rotation}
+      position={preview ? position : [0, 0, 0]}
+      rotation={preview ? rotation : [0, 0, 0]}
       scale={scale}
       visible={visible}
       material={material}
@@ -189,5 +203,29 @@ export const InteractiveObject = ({
         </group>
       )}
     </mesh>
+  );
+
+  if (preview || !physics) {
+    return meshNode;
+  }
+
+  return (
+    <RigidBody
+      ref={rigidBodyRef}
+      type={kinematic ? 'kinematicPosition' : 'dynamic'}
+      colliders={false}
+      position={position}
+      rotation={rotation}
+      linearDamping={physics.linearDamping}
+      angularDamping={physics.angularDamping}
+      gravityScale={physics.gravityScale}
+      mass={physics.mass}
+      enabledTranslations={[true, true, true]}
+      enabledRotations={[true, true, true]}
+      canSleep
+    >
+      {createColliderForKind(kind, scale, physics)}
+      {meshNode}
+    </RigidBody>
   );
 };

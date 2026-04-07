@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useOverlayState } from '../stores/interactionStore';
+import { usePhysicsStore } from '../physics/physicsStore';
 
 export const Overlay = () => {
   const {
@@ -21,6 +22,18 @@ export const Overlay = () => {
     toggleInvertLeftPinch,
     setMoveMode,
   } = useOverlayState();
+  const gravityMode = usePhysicsStore((s) => s.gravityMode);
+  const worldGravityStrength = usePhysicsStore((s) => s.worldGravityStrength);
+  const zeroGravityLinearDamping = usePhysicsStore((s) => s.zeroGravityLinearDamping);
+  const planetSourceObjectId = usePhysicsStore((s) => s.planetSourceObjectId);
+  const planetGravityStrength = usePhysicsStore((s) => s.planetGravityStrength);
+  const planetGravityRadius = usePhysicsStore((s) => s.planetGravityRadius);
+  const setGravityMode = usePhysicsStore((s) => s.setGravityMode);
+  const setWorldGravityStrength = usePhysicsStore((s) => s.setWorldGravityStrength);
+  const setZeroGravityLinearDamping = usePhysicsStore((s) => s.setZeroGravityLinearDamping);
+  const setPlanetSourceObjectId = usePhysicsStore((s) => s.setPlanetSourceObjectId);
+  const setPlanetGravityStrength = usePhysicsStore((s) => s.setPlanetGravityStrength);
+  const setPlanetGravityRadius = usePhysicsStore((s) => s.setPlanetGravityRadius);
 
   const [isOpen, setIsOpen] = useState(false);
 
@@ -73,6 +86,7 @@ export const Overlay = () => {
             <p>Submenu: {menuSubmenuOpen ? 'Open' : 'Closed'}</p>
             <p>Mesh Kind: {selectedMeshKind ?? 'None'}</p>
             <p>Status: {trackerStatus}</p>
+            <p>Gravity Mode: {gravityMode}</p>
 
             <div className="hud__controls">
               <button onClick={toggleLandmarkOverlay} type="button">
@@ -87,6 +101,13 @@ export const Overlay = () => {
               >
                 Move: {moveMode}
               </button>
+
+              <button
+                onClick={() => setGravityMode(gravityMode === 'ZERO_G' ? 'WORLD_G' : 'ZERO_G')}
+                type="button"
+              >
+                0 Gravity: {gravityMode === 'ZERO_G' ? 'On' : 'Off'}
+              </button>
             </div>
           </>
         )}
@@ -94,7 +115,7 @@ export const Overlay = () => {
 
       <div className="hud__card">
         <div className="hud__header">
-          <h1>Camera Settings</h1>
+          <h1>Scene Physics</h1>
         </div>
         <div className="hud__switch-row">
           <span>Invert Left Pinch</span>
@@ -108,6 +129,77 @@ export const Overlay = () => {
             <span className="hud__switch-thumb" />
           </button>
         </div>
+        <div className="hud__physics-row">
+          <span>Mode</span>
+          <div className="hud__segmented">
+            <button className={gravityMode === 'ZERO_G' ? 'is-active' : ''} onClick={() => setGravityMode('ZERO_G')} type="button">
+              0G
+            </button>
+            <button className={gravityMode === 'WORLD_G' ? 'is-active' : ''} onClick={() => setGravityMode('WORLD_G')} type="button">
+              World
+            </button>
+            <button className={gravityMode === 'PLANET_G' ? 'is-active' : ''} onClick={() => setGravityMode('PLANET_G')} type="button">
+              Planet
+            </button>
+          </div>
+        </div>
+        <div className="hud__physics-row">
+          <span>World Gravity</span>
+          <input
+            max={4}
+            min={0.1}
+            onChange={(event) => setWorldGravityStrength(Number(event.target.value))}
+            step={0.05}
+            type="range"
+            value={worldGravityStrength}
+          />
+          <strong>{worldGravityStrength.toFixed(2)}x</strong>
+        </div>
+        <div className="hud__physics-row">
+          <span>0G Damping</span>
+          <input
+            max={1.5}
+            min={0}
+            onChange={(event) => setZeroGravityLinearDamping(Number(event.target.value))}
+            step={0.01}
+            type="range"
+            value={zeroGravityLinearDamping}
+          />
+          <strong>{zeroGravityLinearDamping.toFixed(2)}</strong>
+        </div>
+        <div className="hud__physics-row">
+          <span>Planet Strength</span>
+          <input
+            max={120}
+            min={0}
+            onChange={(event) => setPlanetGravityStrength(Number(event.target.value))}
+            step={1}
+            type="range"
+            value={planetGravityStrength}
+          />
+          <strong>{planetGravityStrength.toFixed(0)}</strong>
+        </div>
+        <div className="hud__physics-row">
+          <span>Planet Radius</span>
+          <input
+            max={120}
+            min={1}
+            onChange={(event) => setPlanetGravityRadius(Number(event.target.value))}
+            step={1}
+            type="range"
+            value={planetGravityRadius}
+          />
+          <strong>{planetGravityRadius.toFixed(0)}</strong>
+        </div>
+        <div className="hud__controls hud__controls--stacked">
+          <button onClick={() => selectedObjectId && setPlanetSourceObjectId(selectedObjectId)} type="button">
+            Set Selected As Planet
+          </button>
+          <button onClick={() => setPlanetSourceObjectId(null)} type="button">
+            Clear Planet Source
+          </button>
+        </div>
+        <p>Planet Source: {planetSourceObjectId ?? 'None'}</p>
       </div>
 
       <p className="hud__tip">

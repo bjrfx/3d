@@ -1,9 +1,10 @@
 import { useMemo, useState, type CSSProperties } from 'react';
 import { useInteractionStore } from '../stores/interactionStore';
 import { useObjectAttributesStore } from '../stores/objectAttributesStore';
+import type { PhysicsMaterial } from '../physics/types';
 
 type VectorField = 'position' | 'rotation' | 'scale';
-type SectionKey = 'transform' | 'appearance' | 'visibility' | 'geometry' | 'object';
+type SectionKey = 'transform' | 'appearance' | 'visibility' | 'geometry' | 'physics' | 'object';
 
 const clamp = (value: number, min: number, max: number): number => Math.max(min, Math.min(max, value));
 
@@ -101,6 +102,7 @@ export const AttributeManager = () => {
     appearance: true,
     visibility: true,
     geometry: true,
+    physics: true,
     object: true,
   });
 
@@ -155,6 +157,18 @@ export const AttributeManager = () => {
     };
     updateObject(activeObjectId, {
       color: rgbToHex(next.r, next.g, next.b),
+    });
+  };
+
+  const updatePhysics = (field: keyof PhysicsMaterial, value: number) => {
+    if (!selectedObject) {
+      return;
+    }
+    updateObject(activeObjectId, {
+      physics: {
+        ...selectedObject.physics,
+        [field]: value,
+      },
     });
   };
 
@@ -420,6 +434,101 @@ export const AttributeManager = () => {
             <div><span>Type</span><strong>{selectedObject.geometry.type}</strong></div>
             <div><span>Vertices</span><strong>{selectedObject.geometry.vertices}</strong></div>
             <div><span>Faces</span><strong>{selectedObject.geometry.faces}</strong></div>
+          </div>
+        )}
+      </section>
+
+      <section className="attribute-manager__section attribute-manager__section--physics">
+        <button
+          className="attribute-manager__section-trigger"
+          data-attr-control="section:physics"
+          data-attr-control-type="button"
+          onClick={() => toggleSection('physics')}
+          type="button"
+        >
+          <span className={expandedSections.physics ? 'attribute-manager__chevron is-open' : 'attribute-manager__chevron'}>
+            ▸
+          </span>
+          <span>Physics</span>
+          {renderHold('section:physics')}
+        </button>
+
+        {expandedSections.physics && (
+          <div className="attribute-manager__section-body">
+            <div className="attribute-manager__control-row">
+              <span className="attribute-manager__axis">Mass</span>
+              <input
+                className={isControlHighlighted('physics:mass') ? 'attribute-manager__slider is-highlighted' : 'attribute-manager__slider'}
+                data-attr-control="physics:mass"
+                data-attr-control-type="slider"
+                min={0.05}
+                max={20}
+                step={0.05}
+                type="range"
+                value={selectedObject.physics.mass}
+                onChange={(event) => updatePhysics('mass', clamp(Number(event.target.value), 0.05, 20))}
+              />
+              {renderHold('physics:mass')}
+              <input
+                className="attribute-manager__number"
+                min={0.05}
+                max={20}
+                step={0.05}
+                type="number"
+                value={selectedObject.physics.mass.toFixed(2)}
+                onChange={(event) => updatePhysics('mass', clamp(Number(event.target.value), 0.05, 20))}
+              />
+            </div>
+
+            <div className="attribute-manager__control-row">
+              <span className="attribute-manager__axis">Fric</span>
+              <input
+                className={isControlHighlighted('physics:friction') ? 'attribute-manager__slider is-highlighted' : 'attribute-manager__slider'}
+                data-attr-control="physics:friction"
+                data-attr-control-type="slider"
+                min={0}
+                max={1.5}
+                step={0.01}
+                type="range"
+                value={selectedObject.physics.friction}
+                onChange={(event) => updatePhysics('friction', clamp(Number(event.target.value), 0, 1.5))}
+              />
+              {renderHold('physics:friction')}
+              <input
+                className="attribute-manager__number"
+                min={0}
+                max={1.5}
+                step={0.01}
+                type="number"
+                value={selectedObject.physics.friction.toFixed(2)}
+                onChange={(event) => updatePhysics('friction', clamp(Number(event.target.value), 0, 1.5))}
+              />
+            </div>
+
+            <div className="attribute-manager__control-row">
+              <span className="attribute-manager__axis">Rest</span>
+              <input
+                className={isControlHighlighted('physics:restitution') ? 'attribute-manager__slider is-highlighted' : 'attribute-manager__slider'}
+                data-attr-control="physics:restitution"
+                data-attr-control-type="slider"
+                min={0}
+                max={1}
+                step={0.01}
+                type="range"
+                value={selectedObject.physics.restitution}
+                onChange={(event) => updatePhysics('restitution', clamp(Number(event.target.value), 0, 1))}
+              />
+              {renderHold('physics:restitution')}
+              <input
+                className="attribute-manager__number"
+                min={0}
+                max={1}
+                step={0.01}
+                type="number"
+                value={selectedObject.physics.restitution.toFixed(2)}
+                onChange={(event) => updatePhysics('restitution', clamp(Number(event.target.value), 0, 1))}
+              />
+            </div>
           </div>
         )}
       </section>

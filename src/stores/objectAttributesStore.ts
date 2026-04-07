@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { MeshKind } from './interactionStore';
+import { DEFAULT_PHYSICS_MATERIAL, type PhysicsMaterial } from '../physics/types';
 
 export interface GeometryData {
   type: string;
@@ -18,6 +19,7 @@ export interface SceneObjectAttributes {
   color: string;
   opacity: number;
   geometry: GeometryData;
+  physics: PhysicsMaterial;
 }
 
 interface ObjectAttributesState {
@@ -57,6 +59,7 @@ const makeDefaultObject = (
   color,
   opacity: 1,
   geometry: DEFAULT_GEOMETRY,
+  physics: { ...DEFAULT_PHYSICS_MATERIAL },
 });
 
 export const useObjectAttributesStore = create<ObjectAttributesState>()((set) => ({
@@ -75,6 +78,10 @@ export const useObjectAttributesStore = create<ObjectAttributesState>()((set) =>
           ...state.objects,
           {
             ...object,
+            physics: {
+              ...DEFAULT_PHYSICS_MATERIAL,
+              ...object.physics,
+            },
             id,
           },
         ],

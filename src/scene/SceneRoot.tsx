@@ -1,13 +1,13 @@
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls, Text } from '@react-three/drei';
-import { useMemo, useRef, useState } from 'react';
-import { Intersection, Mesh, Object3D, Plane, Raycaster, Spherical, Vector3 } from 'three';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { CuboidCollider, Physics, type RapierRigidBody } from '@react-three/rapier';
+import { Euler, Intersection, Mesh, Object3D, Plane, Quaternion, Raycaster, Spherical, Vector3 } from 'three';
 import { useInteractionStore, type InteractionStateLabel } from '../stores/interactionStore';
 import { useObjectAttributesStore } from '../stores/objectAttributesStore';
 import { trackingRuntime } from '../tracking/runtime';
 import { defaultMeshColor, getMeshYOffset, InteractiveObject } from './InteractiveObject';
 import {
-  applySmoothedDrag,
   beginGrab,
   computeDragTarget,
   createDragContext,
@@ -16,6 +16,7 @@ import {
   rayFromHand,
 } from '../interaction/mapper';
 import { angleBetweenVec3, isHandOpen, palmNormal, type Vec3 } from '../math/handMath';
+import { usePhysicsStore } from '../physics/physicsStore';
 
 const raycaster = new Raycaster();
 const smoothTarget = new Vector3();
@@ -32,10 +33,12 @@ const orbitOffset = new Vector3();
 const orbitSpherical = new Spherical();
 const placementGroundPlane = new Plane(new Vector3(0, 1, 0), 0);
 const placementHitPoint = new Vector3();
+const bodyTarget = new Vector3();
+const quaternionBuffer = new Quaternion();
+const eulerBuffer = new Euler();
 
 const POSITION_LERP_ALPHA = 0.2;
 const POSITION_DEADZONE = 0.002;
-const MAX_EXTREME_JUMP = 1.2;
 const PAN_SENSITIVITY = 1;
 const PAN_LERP_ALPHA = 0.25;
 const ZOOM_DEPTH_SENSITIVITY = 95;
@@ -56,6 +59,8 @@ const LEFT_ROTATION_MAINTAIN_RAD = 0.42;
 const LEFT_TOWARD_SELF_Z_DELTA_CONFIRM = 0.1;
 const LEFT_TOWARD_SELF_Z_DELTA_MAINTAIN = 0.05;
 const LEFT_SIDEWAYS_CLOSE_Z_ABS = 0.14;
+const STORE_SYNC_DISTANCE_EPS = 0.0015;
+const STORE_SYNC_ROT_EPS = 0.003;
 
 type StageOneState = 'IDLE' | 'HOVER' | 'SELECT' | 'DRAG' | 'RELEASE';
 
@@ -80,6 +85,13 @@ const SceneController = () => {
   const addObject = useObjectAttributesStore((s) => s.addObject);
   const updateObject = useObjectAttributesStore((s) => s.updateObject);
   const setObjectGeometry = useObjectAttributesStore((s) => s.setObjectGeometry);
+  const gravityMode = usePhysicsStore((s) => s.gravityMode);
+  const planetSourceObjectId = usePhysicsStore((s) => s.planetSourceObjectId);
+  const planetGravityStrength = usePhysicsStore((s) => s.planetGravityStrength);
+  const planetGravityRadius = usePhysicsStore((s) => s.planetGravityRadius);
+  const zeroGravityLinearDamping = usePhysicsStore((s) => s.zeroGravityLinearDamping);
+  const zeroGravityAngularDamping = usePhysicsStore((s) => s.zeroGravityAngularDamping);
+  const setPlanetSourceObjectId = usePhysicsStore((s) => s.setPlanetSourceObjectId);
 
   const { camera, scene } = useThree();
   const controlsRef = useRef<any>(null);
@@ -99,8 +111,10 @@ const SceneController = () => {
     orbitTarget: new Vector3(),
   });
   const objectRefs = useRef<Record<string, Mesh>>({});
+  const rigidBodyRefs = useRef<Record<string, RapierRigidBody>>({});
   const rayHitDebugRef = useRef<Mesh>(null);
   const dragRef = useRef(createDragContext());
+  const [draggingObjectId, setDraggingObjectId] = useState<string | null>(null);
   const stageStateRef = useRef<StageOneState>('IDLE');
   const hoverFramesRef = useRef(0);
   const prevPinchRef = useRef(false);
@@ -115,6 +129,7 @@ const SceneController = () => {
     closingStartedAt: number | null;
   }>({ baselineNormal: null, stageStartedAt: 0, openingStartedAt: null, closingStartedAt: null });
   const placementPinchPrevRef = useRef(false);
+  const selectedSyncTimeRef = useRef(0);
   const [previewPosition, setPreviewPosition] = useState<[number, number, number]>([0, getMeshYOffset('box'), 0]);
 
   const registerObject = (id: string, mesh: Mesh) => {
@@ -134,6 +149,47 @@ const SceneController = () => {
       faces: faceCount,
     });
   };
+
+  const registerRigidBody = (id: string, body: RapierRigidBody) => {
+    rigidBodyRefs.current[id] = body;
+  };
+
+  useEffect(() => {
+    const existingIds = new Set(objects.map((obj) => obj.id));
+    Object.keys(objectRefs.current).forEach((id) => {
+      if (id !== 'preview-mesh' && !existingIds.has(id)) {
+        delete objectRefs.current[id];
+      }
+    });
+    Object.keys(rigidBodyRefs.current).forEach((id) => {
+      if (!existingIds.has(id)) {
+        delete rigidBodyRefs.current[id];
+      }
+    });
+
+    if (planetSourceObjectId && !existingIds.has(planetSourceObjectId)) {
+      setPlanetSourceObjectId(null);
+    }
+  }, [objects, planetSourceObjectId, setPlanetSourceObjectId]);
+
+  useEffect(() => {
+    const gravityScale = gravityMode === 'WORLD_G' ? 1 : 0;
+    const linearDamping = gravityMode === 'ZERO_G' ? zeroGravityLinearDamping : 0.1;
+    const angularDamping = gravityMode === 'ZERO_G' ? zeroGravityAngularDamping : 0.35;
+
+    for (let i = 0; i < objects.length; i += 1) {
+      const objectId = objects[i].id;
+      const body = rigidBodyRefs.current[objectId];
+      if (!body || body.isKinematic()) {
+        continue;
+      }
+
+      body.setGravityScale(gravityScale, true);
+      body.setLinearDamping(linearDamping);
+      body.setAngularDamping(angularDamping);
+      body.wakeUp();
+    }
+  }, [gravityMode, zeroGravityLinearDamping, zeroGravityAngularDamping, objects]);
 
   const updateUiMode = (nextMode: 'OBJECT_MODE' | 'CAMERA_MODE') => {
     if (lastModeRef.current !== nextMode) {
@@ -245,6 +301,73 @@ const SceneController = () => {
     const noHandsActive = !selectorPinchActive && !selectorGrabActive && !leftActive;
     const leftOpenPalm = Boolean(left && isHandOpen(left.landmarks));
     const leftNormal = left ? palmNormal(left.landmarks) : null;
+
+    if (gravityMode === 'PLANET_G' && planetSourceObjectId) {
+      const sourceBody = rigidBodyRefs.current[planetSourceObjectId];
+      if (sourceBody) {
+        const sourcePos = sourceBody.translation();
+        for (let i = 0; i < objects.length; i += 1) {
+          const objectId = objects[i].id;
+          if (objectId === planetSourceObjectId || objectId === draggingObjectId) {
+            continue;
+          }
+          const body = rigidBodyRefs.current[objectId];
+          if (!body || body.isKinematic()) {
+            continue;
+          }
+
+          const bodyPos = body.translation();
+          bodyTarget.set(sourcePos.x - bodyPos.x, sourcePos.y - bodyPos.y, sourcePos.z - bodyPos.z);
+          const distance = bodyTarget.length();
+          if (distance < 0.0001 || distance > planetGravityRadius) {
+            continue;
+          }
+
+          bodyTarget.divideScalar(distance);
+          const falloff = 1 - distance / planetGravityRadius;
+          const forceMagnitude = planetGravityStrength * Math.max(falloff, 0) * body.mass();
+          body.addForce(
+            {
+              x: bodyTarget.x * forceMagnitude,
+              y: bodyTarget.y * forceMagnitude,
+              z: bodyTarget.z * forceMagnitude,
+            },
+            true
+          );
+        }
+      }
+    }
+
+    if (selectedObjectId && selectedObjectId !== draggingObjectId) {
+      const selectedBody = rigidBodyRefs.current[selectedObjectId];
+      if (selectedBody && now - selectedSyncTimeRef.current > 55) {
+        const pos = selectedBody.translation();
+        const rot = selectedBody.rotation();
+        quaternionBuffer.set(rot.x, rot.y, rot.z, rot.w);
+        eulerBuffer.setFromQuaternion(quaternionBuffer, 'XYZ');
+
+        const selectedObject = objects.find((obj) => obj.id === selectedObjectId);
+        if (selectedObject) {
+          const posDelta =
+            Math.abs(selectedObject.position[0] - pos.x) +
+            Math.abs(selectedObject.position[1] - pos.y) +
+            Math.abs(selectedObject.position[2] - pos.z);
+          const rotDelta =
+            Math.abs(selectedObject.rotation[0] - eulerBuffer.x) +
+            Math.abs(selectedObject.rotation[1] - eulerBuffer.y) +
+            Math.abs(selectedObject.rotation[2] - eulerBuffer.z);
+
+          if (posDelta > STORE_SYNC_DISTANCE_EPS || rotDelta > STORE_SYNC_ROT_EPS) {
+            updateObject(selectedObjectId, {
+              position: [pos.x, pos.y, pos.z],
+              rotation: [eulerBuffer.x, eulerBuffer.y, eulerBuffer.z],
+            });
+          }
+        }
+
+        selectedSyncTimeRef.current = now;
+      }
+    }
 
     if (menuLifecycle === 'OPENING' && leftMenuRef.current.openingStartedAt && now - leftMenuRef.current.openingStartedAt >= MENU_OPENING_DURATION_MS) {
       confirmMenuOpen();
@@ -476,6 +599,14 @@ const SceneController = () => {
             vertices: 0,
             faces: 0,
           },
+          physics: {
+            mass: 1,
+            friction: 0.72,
+            restitution: 0.14,
+            linearDamping: 0.1,
+            angularDamping: 0.35,
+            gravityScale: 1,
+          },
         });
       }
       placementPinchPrevRef.current = placePinchActive;
@@ -561,6 +692,7 @@ const SceneController = () => {
     if (grabStart && activeSelected && right) {
       beginGrab(camera, right, activeSelected, dragRef.current, grabStartHandWorld);
       stageStateRef.current = 'DRAG';
+      setDraggingObjectId(activeSelectedId);
       updateUiMode('OBJECT_MODE');
     }
 
@@ -569,25 +701,34 @@ const SceneController = () => {
         beginGrab(camera, right, activeSelected, dragRef.current, grabStartHandWorld);
       }
       stageStateRef.current = 'DRAG';
+      if (activeSelectedId && draggingObjectId !== activeSelectedId) {
+        setDraggingObjectId(activeSelectedId);
+      }
     }
 
     if (stageStateRef.current === 'DRAG' && right && selectorGrabActive && dragRef.current.active && dragRef.current.object) {
       if (computeDragTarget(camera, right, dragRef.current, smoothTarget)) {
-        applySmoothedDrag(
-          dragRef.current.object,
-          smoothTarget,
-          frameDelta,
-          POSITION_DEADZONE,
-          MAX_EXTREME_JUMP,
-          POSITION_LERP_ALPHA
-        );
-
         const draggedId = activeSelectedId;
         if (draggedId) {
-          const draggedPos = dragRef.current.object.position;
-          updateObject(draggedId, {
-            position: [draggedPos.x, draggedPos.y, draggedPos.z],
-          });
+          const body = rigidBodyRefs.current[draggedId];
+          if (body) {
+            const bodyPos = body.translation();
+            frameDelta.set(smoothTarget.x - bodyPos.x, smoothTarget.y - bodyPos.y, smoothTarget.z - bodyPos.z);
+            if (frameDelta.lengthSq() > POSITION_DEADZONE * POSITION_DEADZONE) {
+              bodyTarget.set(
+                bodyPos.x + frameDelta.x * POSITION_LERP_ALPHA,
+                bodyPos.y + frameDelta.y * POSITION_LERP_ALPHA,
+                bodyPos.z + frameDelta.z * POSITION_LERP_ALPHA
+              );
+            } else {
+              bodyTarget.set(bodyPos.x, bodyPos.y, bodyPos.z);
+            }
+
+            body.setNextKinematicTranslation({ x: bodyTarget.x, y: bodyTarget.y, z: bodyTarget.z });
+            updateObject(draggedId, {
+              position: [bodyTarget.x, bodyTarget.y, bodyTarget.z],
+            });
+          }
         }
       }
     }
@@ -596,16 +737,19 @@ const SceneController = () => {
     if (grabRelease) {
       stageStateRef.current = 'RELEASE';
       endGrab(dragRef.current);
+      setDraggingObjectId(null);
     }
 
     if (stageStateRef.current === 'DRAG' && (!right || rightState === 'RELEASE' || rightState === 'IDLE')) {
       stageStateRef.current = 'RELEASE';
       endGrab(dragRef.current);
+      setDraggingObjectId(null);
     }
 
     if (stageStateRef.current === 'RELEASE') {
       stageStateRef.current = right ? 'HOVER' : 'IDLE';
       endGrab(dragRef.current);
+      setDraggingObjectId(null);
     }
 
     if (!selectorPinchActive) {
@@ -636,6 +780,7 @@ const SceneController = () => {
       <directionalLight position={[6, 9, 5]} intensity={1.4} castShadow />
       <axesHelper args={[5]} />
       <gridHelper args={[20, 20, '#5b6d8e', '#2f3b4e']} position={[0, 0.001, 0]} />
+      <CuboidCollider args={[16, 0.08, 16]} position={[0, -0.08, 0]} friction={0.85} restitution={0.08} />
       <Text position={[5.5, 0.18, 0]} fontSize={0.24} color="#ff4d4d" anchorX="center" anchorY="middle">
         X
       </Text>
@@ -666,8 +811,16 @@ const SceneController = () => {
           color={item.color}
           opacity={item.opacity}
           visible={item.visible}
+          physics={{
+            ...item.physics,
+            gravityScale: gravityMode === 'WORLD_G' ? item.physics.gravityScale : 0,
+            linearDamping: gravityMode === 'ZERO_G' ? zeroGravityLinearDamping : item.physics.linearDamping,
+            angularDamping: gravityMode === 'ZERO_G' ? zeroGravityAngularDamping : item.physics.angularDamping,
+          }}
+          kinematic={draggingObjectId === item.id}
           selected={selectedObjectId === item.id}
           onReady={registerObject}
+          onRigidBodyReady={registerRigidBody}
         />
       ))}
       <mesh ref={rayHitDebugRef} visible={false}>
@@ -688,12 +841,23 @@ const SceneController = () => {
 
 export const SceneRoot = () => {
   const cameraPosition = useMemo<[number, number, number]>(() => [0, 5.4, 11], []);
+  const gravityMode = usePhysicsStore((s) => s.gravityMode);
+  const worldGravityStrength = usePhysicsStore((s) => s.worldGravityStrength);
+
+  const gravityVector = useMemo<[number, number, number]>(() => {
+    if (gravityMode === 'WORLD_G') {
+      return [0, -9.81 * worldGravityStrength, 0];
+    }
+    return [0, 0, 0];
+  }, [gravityMode, worldGravityStrength]);
 
   return (
     <Canvas camera={{ position: cameraPosition, fov: 48 }} shadows gl={{ antialias: true }}>
       <color attach="background" args={['#0b1018']} />
       <fog attach="fog" args={['#0b1018', 12, 36]} />
-      <SceneController />
+      <Physics gravity={gravityVector} timeStep={1 / 60} colliders={false}>
+        <SceneController />
+      </Physics>
     </Canvas>
   );
 };
