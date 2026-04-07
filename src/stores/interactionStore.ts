@@ -3,6 +3,7 @@ import type { GestureState } from '../types';
 
 export type MoveMode = 'relative' | 'absolute';
 export type InteractionMode = 'OBJECT_MODE' | 'CAMERA_MODE';
+export type RightPointerMode = 'selector' | 'control';
 export type MenuLifecycle = 'CLOSED' | 'OPENING' | 'OPEN' | 'CLOSING';
 export type LeftMenuStage = 'IDLE' | 'PALM_SHOWN' | 'CONFIRMED';
 export type MenuTarget = 'mesh' | `mesh:${MeshKind}` | 'toggle:hud';
@@ -46,6 +47,11 @@ interface InteractionState {
   menuSubmenuOpen: boolean;
   selectedMeshKind: MeshKind | null;
   sceneInputLocked: boolean;
+  rightPointerMode: RightPointerMode;
+  panelInputLocked: boolean;
+  panelHoveredControl: string | null;
+  panelActiveControl: string | null;
+  panelHoldProgress: number;
   setFps: (fps: number) => void;
   setCurrentGesture: (gesture: string) => void;
   setSelectedObjectId: (id: string | null) => void;
@@ -67,6 +73,13 @@ interface InteractionState {
   cancelMenuHold: () => void;
   setMenuSubmenuOpen: (open: boolean) => void;
   setSelectedMeshKind: (kind: MeshKind | null) => void;
+  toggleRightPointerMode: () => void;
+  setRightPointerMode: (mode: RightPointerMode) => void;
+  setPanelInputLocked: (locked: boolean) => void;
+  setPanelHoveredControl: (controlId: string | null) => void;
+  setPanelActiveControl: (controlId: string | null) => void;
+  setPanelHoldProgress: (progress: number) => void;
+  clearPanelGestureState: () => void;
 }
 
 export const useInteractionStore = create<InteractionState>((set) => ({
@@ -89,6 +102,11 @@ export const useInteractionStore = create<InteractionState>((set) => ({
   menuSubmenuOpen: false,
   selectedMeshKind: null,
   sceneInputLocked: false,
+  rightPointerMode: 'selector',
+  panelInputLocked: false,
+  panelHoveredControl: null,
+  panelActiveControl: null,
+  panelHoldProgress: 0,
   setFps: (fps) => set({ fps }),
   setCurrentGesture: (gesture) => set({ currentGesture: gesture }),
   setSelectedObjectId: (selectedObjectId) => set({ selectedObjectId }),
@@ -130,6 +148,22 @@ export const useInteractionStore = create<InteractionState>((set) => ({
   cancelMenuHold: () => set({ menuHoldTarget: null, menuHoldStartedAt: null, menuHoldProgress: 0 }),
   setMenuSubmenuOpen: (menuSubmenuOpen) => set({ menuSubmenuOpen }),
   setSelectedMeshKind: (selectedMeshKind) => set({ selectedMeshKind }),
+  toggleRightPointerMode: () =>
+    set((state) => ({
+      rightPointerMode: state.rightPointerMode === 'selector' ? 'control' : 'selector',
+    })),
+  setRightPointerMode: (rightPointerMode) => set({ rightPointerMode }),
+  setPanelInputLocked: (panelInputLocked) => set({ panelInputLocked }),
+  setPanelHoveredControl: (panelHoveredControl) => set({ panelHoveredControl }),
+  setPanelActiveControl: (panelActiveControl) => set({ panelActiveControl }),
+  setPanelHoldProgress: (panelHoldProgress) => set({ panelHoldProgress }),
+  clearPanelGestureState: () =>
+    set({
+      panelInputLocked: false,
+      panelHoveredControl: null,
+      panelActiveControl: null,
+      panelHoldProgress: 0,
+    }),
 }));
 
 export const useOverlayState = () => {
@@ -147,6 +181,7 @@ export const useOverlayState = () => {
   const leftMenuStage = useInteractionStore((s) => s.leftMenuStage);
   const menuSubmenuOpen = useInteractionStore((s) => s.menuSubmenuOpen);
   const selectedMeshKind = useInteractionStore((s) => s.selectedMeshKind);
+  const panelInputLocked = useInteractionStore((s) => s.panelInputLocked);
   const toggleLandmarkOverlay = useInteractionStore((s) => s.toggleLandmarkOverlay);
   const toggleHudVisible = useInteractionStore((s) => s.toggleHudVisible);
   const toggleInvertLeftPinch = useInteractionStore((s) => s.toggleInvertLeftPinch);
@@ -167,6 +202,7 @@ export const useOverlayState = () => {
     leftMenuStage,
     menuSubmenuOpen,
     selectedMeshKind,
+    panelInputLocked,
     toggleLandmarkOverlay,
     toggleHudVisible,
     toggleInvertLeftPinch,

@@ -1,7 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { FilesetResolver, HandLandmarker } from '@mediapipe/tasks-vision';
 import { GestureEngine } from '../gestures/gestureEngine';
-import { centroid, distance3, emaLandmarks, GRAB_OFF, GRAB_ON, PINCH_OFF, PINCH_ON } from '../math/handMath';
+import {
+  centroid,
+  distance3,
+  emaLandmarks,
+  GRAB_OFF,
+  GRAB_ON,
+  PINCH_OFF,
+  PINCH_ON,
+  RING_PINCH_OFF,
+  RING_PINCH_ON,
+} from '../math/handMath';
 import { useInteractionStore, toGestureLabel } from '../stores/interactionStore';
 import { makeHandData, trackingRuntime } from './runtime';
 import type { HandData, Landmark } from '../types';
@@ -13,6 +23,7 @@ interface Candidate {
   centroid: Landmark;
   pinchDistance: number;
   grabDistance: number;
+  ringPinchDistance: number;
 }
 
 const TRACK_INTERVAL_MS = 33;
@@ -22,6 +33,7 @@ export const useHandTracking = (canvasRef: { current: HTMLCanvasElement | null }
   const setCurrentGesture = useInteractionStore((s) => s.setCurrentGesture);
   const setTrackerStatus = useInteractionStore((s) => s.setTrackerStatus);
   const showOverlay = useInteractionStore((s) => s.showLandmarkOverlay);
+  const toggleRightPointerMode = useInteractionStore((s) => s.toggleRightPointerMode);
 
   const frameRef = useRef<number>(0);
   const lastInferenceRef = useRef<number>(0);
@@ -34,6 +46,9 @@ export const useHandTracking = (canvasRef: { current: HTMLCanvasElement | null }
   const rightPinchLatchRef = useRef(false);
   const leftGrabLatchRef = useRef(false);
   const rightGrabLatchRef = useRef(false);
+  const rightRingLatchRef = useRef(false);
+  const prevRightRingRef = useRef(false);
+  const lastPointerToggleAtRef = useRef(0);
   const lastGestureLabelRef = useRef('IDLE');
   const lastGestureDebugKeyRef = useRef('');
 
@@ -156,7 +171,16 @@ export const useHandTracking = (canvasRef: { current: HTMLCanvasElement | null }
       const center = centroid(smoothed);
       const pinchDistance = distance3(smoothed[4], smoothed[8]);
       const grabDistance = distance3(smoothed[4], smoothed[12]);
-      return { landmarks: smoothed, label: handedness, confidence, centroid: center, pinchDistance, grabDistance };
+      const ringPinchDistance = distance3(smoothed[4], smoothed[16]);
+      return {
+        landmarks: smoothed,
+        label: handedness,
+        confidence,
+        centroid: center,
+        pinchDistance,
+        grabDistance,
+        ringPinchDistance,
+      };
     };
 
     const run = async () => {
@@ -261,6 +285,7 @@ export const useHandTracking = (canvasRef: { current: HTMLCanvasElement | null }
               assigned.right.pinchDistance,
               assigned.right.grabDistance
             );
+          const rightRingPinchDistance = assigned.right?.ringPinchDistance ?? null;
 
           prevLeft = left ?? prevLeft;
           prevRight = right ?? prevRight;
@@ -284,9 +309,13 @@ export const useHandTracking = (canvasRef: { current: HTMLCanvasElement | null }
             rightGrabLatchRef.current = rightGrabLatchRef.current
               ? right.grabDistance < GRAB_OFF
               : right.grabDistance < GRAB_ON;
+            rightRingLatchRef.current = rightRingLatchRef.current
+              ? rightRingPinchDistance !== null && rightRingPinchDistance < RING_PINCH_OFF
+              : rightRingPinchDistance !== null && rightRingPinchDistance < RING_PINCH_ON;
           } else {
             rightPinchLatchRef.current = false;
             rightGrabLatchRef.current = false;
+            rightRingLatchRef.current = false;
           }
 
           let leftPinch = false;
@@ -304,6 +333,18 @@ export const useHandTracking = (canvasRef: { current: HTMLCanvasElement | null }
           } else if (rightPinchLatchRef.current) {
             rightPinch = true;
           }
+
+          const rightRingTapStart = rightRingLatchRef.current && !prevRightRingRef.current;
+          const canTogglePointerMode =
+            rightRingTapStart &&
+            !rightPinch &&
+            !rightGrab &&
+            now - lastPointerToggleAtRef.current > 320;
+          if (canTogglePointerMode) {
+            toggleRightPointerMode();
+            lastPointerToggleAtRef.current = now;
+          }
+          prevRightRingRef.current = rightRingLatchRef.current;
 
           const bothPresent = Boolean(left && right);
           const gestures = engineRef.current.update(
@@ -379,5 +420,5 @@ export const useHandTracking = (canvasRef: { current: HTMLCanvasElement | null }
         landmarker.close();
       }
     };
-  }, [canvasRef, setCurrentGesture, setFps, setTrackerStatus]);
+  }, [canvasRef, setCurrentGesture, setFps, setTrackerStatus, toggleRightPointerMode]);
 };

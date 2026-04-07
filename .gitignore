@@ -134,3 +134,28 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+untitled folder/.DS_Store
+untitled folder/index.html
+untitled folder/package-lock.json
+untitled folder/package.json
+untitled folder/server.js
+untitled folder/src/.DS_Store
+untitled folder/src/gestures/gestureEngine.ts
+untitled folder/src/index.css
+untitled folder/src/interaction/mapper.ts
+untitled folder/src/main.tsx
+untitled folder/src/math/handMath.ts
+untitled folder/src/scene/InteractiveObject.tsx
+untitled folder/src/scene/SceneRoot.tsx
+untitled folder/src/stores/interactionStore.ts
+untitled folder/src/tracking/runtime.ts
+untitled folder/src/tracking/useHandTracking.ts
+untitled folder/src/types/index.ts
+untitled folder/src/ui/FloatingMenu.tsx
+untitled folder/src/ui/Overlay.tsx
+untitled folder/tsconfig.app.json
+untitled folder/tsconfig.json
+untitled folder/tsconfig.node.json
+untitled folder/vite.config.d.ts
+untitled folder/vite.config.js
+untitled folder/vite.config.ts

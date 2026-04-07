@@ -3,8 +3,9 @@ import { OrbitControls, Text } from '@react-three/drei';
 import { useMemo, useRef, useState } from 'react';
 import { Intersection, Mesh, Object3D, Plane, Raycaster, Spherical, Vector3 } from 'three';
 import { useInteractionStore, type InteractionStateLabel } from '../stores/interactionStore';
+import { useObjectAttributesStore } from '../stores/objectAttributesStore';
 import { trackingRuntime } from '../tracking/runtime';
-import { getMeshYOffset, InteractiveObject } from './InteractiveObject';
+import { defaultMeshColor, getMeshYOffset, InteractiveObject } from './InteractiveObject';
 import {
   applySmoothedDrag,
   beginGrab,
@@ -58,18 +59,14 @@ const LEFT_SIDEWAYS_CLOSE_Z_ABS = 0.14;
 
 type StageOneState = 'IDLE' | 'HOVER' | 'SELECT' | 'DRAG' | 'RELEASE';
 
-interface PlacedMesh {
-  id: string;
-  kind: 'box' | 'capsule' | 'circle' | 'cylinder' | 'dodecahedron' | 'icosahedron' | 'lathe' | 'octahedron' | 'plane' | 'ring' | 'sphere' | 'sprite' | 'tetrahedron' | 'torus' | 'torusknot' | 'tube';
-  position: [number, number, number];
-}
-
 const SceneController = () => {
   const selectedObjectId = useInteractionStore((s) => s.selectedObjectId);
   const invertLeftPinch = useInteractionStore((s) => s.invertLeftPinch);
   const menuLifecycle = useInteractionStore((s) => s.menuLifecycle);
   const leftMenuStage = useInteractionStore((s) => s.leftMenuStage);
   const sceneInputLocked = useInteractionStore((s) => s.sceneInputLocked);
+  const panelInputLocked = useInteractionStore((s) => s.panelInputLocked);
+  const rightPointerMode = useInteractionStore((s) => s.rightPointerMode);
   const selectedMeshKind = useInteractionStore((s) => s.selectedMeshKind);
   const setSelectedObjectId = useInteractionStore((s) => s.setSelectedObjectId);
   const setInteractionMode = useInteractionStore((s) => s.setInteractionMode);
@@ -79,6 +76,10 @@ const SceneController = () => {
   const startMenuClosing = useInteractionStore((s) => s.startMenuClosing);
   const finishMenuClosed = useInteractionStore((s) => s.finishMenuClosed);
   const setLeftMenuStage = useInteractionStore((s) => s.setLeftMenuStage);
+  const objects = useObjectAttributesStore((s) => s.objects);
+  const addObject = useObjectAttributesStore((s) => s.addObject);
+  const updateObject = useObjectAttributesStore((s) => s.updateObject);
+  const setObjectGeometry = useObjectAttributesStore((s) => s.setObjectGeometry);
 
   const { camera, scene } = useThree();
   const controlsRef = useRef<any>(null);
@@ -113,16 +114,25 @@ const SceneController = () => {
     openingStartedAt: number | null;
     closingStartedAt: number | null;
   }>({ baselineNormal: null, stageStartedAt: 0, openingStartedAt: null, closingStartedAt: null });
-  const nextPlacedIdRef = useRef(3);
   const placementPinchPrevRef = useRef(false);
   const [previewPosition, setPreviewPosition] = useState<[number, number, number]>([0, getMeshYOffset('box'), 0]);
-  const [placedMeshes, setPlacedMeshes] = useState<PlacedMesh[]>([
-    { id: 'mesh-1', kind: 'box', position: [-1.8, getMeshYOffset('box'), 0] },
-    { id: 'mesh-2', kind: 'sphere', position: [1.8, getMeshYOffset('sphere'), 0] },
-  ]);
 
   const registerObject = (id: string, mesh: Mesh) => {
     objectRefs.current[id] = mesh;
+    if (id === 'preview-mesh') {
+      return;
+    }
+
+    const positionAttr = mesh.geometry?.getAttribute('position');
+    const vertexCount = positionAttr?.count ?? 0;
+    const indexCount = mesh.geometry?.index?.count ?? 0;
+    const faceCount = indexCount > 0 ? Math.floor(indexCount / 3) : Math.floor(vertexCount / 3);
+    const geometryType = mesh.geometry?.type ?? 'UnknownGeometry';
+    setObjectGeometry(id, {
+      type: geometryType,
+      vertices: vertexCount,
+      faces: faceCount,
+    });
   };
 
   const updateUiMode = (nextMode: 'OBJECT_MODE' | 'CAMERA_MODE') => {
@@ -226,10 +236,13 @@ const SceneController = () => {
     const rightState = trackingRuntime.gestures.right;
     const pinchActive = rightState === 'PINCH' || rightState === 'TRANSFORM';
     const grabActive = rightState === 'GRAB';
+    const selectorMode = rightPointerMode === 'selector';
+    const selectorPinchActive = selectorMode && pinchActive;
+    const selectorGrabActive = selectorMode && grabActive;
     const leftActive = leftState === 'PINCH' || leftState === 'GRAB' || leftState === 'TRANSFORM';
     const leftNavGrab = !sceneInputLocked && Boolean(left && leftState === 'GRAB');
     const leftNavPinch = !sceneInputLocked && Boolean(left && (leftState === 'PINCH' || leftState === 'TRANSFORM'));
-    const noHandsActive = !pinchActive && !grabActive && !leftActive;
+    const noHandsActive = !selectorPinchActive && !selectorGrabActive && !leftActive;
     const leftOpenPalm = Boolean(left && isHandOpen(left.landmarks));
     const leftNormal = left ? palmNormal(left.landmarks) : null;
 
@@ -402,15 +415,26 @@ const SceneController = () => {
       cameraNavRef.current.zoomActive = false;
     }
 
-    if (sceneInputLocked) {
+    if (sceneInputLocked || panelInputLocked) {
       hoverFramesRef.current = 0;
       stageStateRef.current = 'IDLE';
       setRayDebugPoint(null);
       endGrab(dragRef.current);
       updateUiMode('CAMERA_MODE');
       updateUiState(stageStateRef.current);
-      prevPinchRef.current = pinchActive;
-      prevGrabRef.current = grabActive;
+      prevPinchRef.current = selectorPinchActive;
+      prevGrabRef.current = selectorGrabActive;
+      return;
+    }
+
+    if (!selectorMode) {
+      hoverFramesRef.current = 0;
+      stageStateRef.current = 'IDLE';
+      setRayDebugPoint(null);
+      endGrab(dragRef.current);
+      updateUiState(stageStateRef.current);
+      prevPinchRef.current = false;
+      prevGrabRef.current = false;
       return;
     }
 
@@ -435,19 +459,24 @@ const SceneController = () => {
         }
       }
 
-      const placePinchActive = pinchActive;
+      const placePinchActive = selectorPinchActive;
       const placePinchStart = placePinchActive && !placementPinchPrevRef.current;
       if (placePinchStart && selectedMeshKind) {
-        const nextId = `mesh-${nextPlacedIdRef.current}`;
-        nextPlacedIdRef.current += 1;
-        setPlacedMeshes((prev) => [
-          ...prev,
-          {
-            id: nextId,
-            kind: selectedMeshKind,
-            position: [previewPosition[0], previewPosition[1], previewPosition[2]],
+        addObject({
+          name: `${selectedMeshKind.charAt(0).toUpperCase()}${selectedMeshKind.slice(1)} Object`,
+          kind: selectedMeshKind,
+          position: [previewPosition[0], previewPosition[1], previewPosition[2]],
+          rotation: [0, 0, 0],
+          scale: [1, 1, 1],
+          visible: true,
+          color: defaultMeshColor(selectedMeshKind),
+          opacity: 1,
+          geometry: {
+            type: 'PendingGeometry',
+            vertices: 0,
+            faces: 0,
           },
-        ]);
+        });
       }
       placementPinchPrevRef.current = placePinchActive;
 
@@ -457,8 +486,8 @@ const SceneController = () => {
       endGrab(dragRef.current);
       updateUiMode('CAMERA_MODE');
       updateUiState(stageStateRef.current);
-      prevPinchRef.current = pinchActive;
-      prevGrabRef.current = grabActive;
+      prevPinchRef.current = selectorPinchActive;
+      prevGrabRef.current = selectorGrabActive;
       return;
     }
     placementPinchPrevRef.current = false;
@@ -498,10 +527,10 @@ const SceneController = () => {
       stageStateRef.current = 'HOVER';
     }
 
-    if (!dragRef.current.active && pinchActive && right) {
+    if (!dragRef.current.active && selectorPinchActive && right) {
       const selectedHit = hoverHit.id ? hoverHit : raycastObjectFromHand(right);
       console.log({
-        pinch: pinchActive,
+        pinch: selectorPinchActive,
         rayHits: selectedHit.hitCount,
       });
       if (selectedHit.id) {
@@ -524,25 +553,25 @@ const SceneController = () => {
       }
     }
 
-    if (!pinchActive && prevPinchRef.current && stageStateRef.current !== 'DRAG') {
+    if (!selectorPinchActive && prevPinchRef.current && stageStateRef.current !== 'DRAG') {
       stageStateRef.current = 'RELEASE';
     }
 
-    const grabStart = grabActive && !prevGrabRef.current;
+    const grabStart = selectorGrabActive && !prevGrabRef.current;
     if (grabStart && activeSelected && right) {
       beginGrab(camera, right, activeSelected, dragRef.current, grabStartHandWorld);
       stageStateRef.current = 'DRAG';
       updateUiMode('OBJECT_MODE');
     }
 
-    if (grabActive && activeSelected && right) {
+    if (selectorGrabActive && activeSelected && right) {
       if (!dragRef.current.active || dragRef.current.object !== activeSelected) {
         beginGrab(camera, right, activeSelected, dragRef.current, grabStartHandWorld);
       }
       stageStateRef.current = 'DRAG';
     }
 
-    if (stageStateRef.current === 'DRAG' && right && grabActive && dragRef.current.active && dragRef.current.object) {
+    if (stageStateRef.current === 'DRAG' && right && selectorGrabActive && dragRef.current.active && dragRef.current.object) {
       if (computeDragTarget(camera, right, dragRef.current, smoothTarget)) {
         applySmoothedDrag(
           dragRef.current.object,
@@ -552,10 +581,18 @@ const SceneController = () => {
           MAX_EXTREME_JUMP,
           POSITION_LERP_ALPHA
         );
+
+        const draggedId = activeSelectedId;
+        if (draggedId) {
+          const draggedPos = dragRef.current.object.position;
+          updateObject(draggedId, {
+            position: [draggedPos.x, draggedPos.y, draggedPos.z],
+          });
+        }
       }
     }
 
-    const grabRelease = !grabActive && prevGrabRef.current;
+    const grabRelease = !selectorGrabActive && prevGrabRef.current;
     if (grabRelease) {
       stageStateRef.current = 'RELEASE';
       endGrab(dragRef.current);
@@ -571,26 +608,26 @@ const SceneController = () => {
       endGrab(dragRef.current);
     }
 
-    if (!pinchActive) {
+    if (!selectorPinchActive) {
       setRayDebugPoint(null);
     }
 
     updateUiState(stageStateRef.current);
 
-    const debugKey = `${pinchActive}|${grabActive}|${activeSelectedId ?? 'None'}|${stageStateRef.current}|${lastModeRef.current}`;
+    const debugKey = `${selectorPinchActive}|${selectorGrabActive}|${activeSelectedId ?? 'None'}|${stageStateRef.current}|${lastModeRef.current}`;
     if (debugKey !== lastDebugKeyRef.current) {
       lastDebugKeyRef.current = debugKey;
       console.log({
-        pinch: pinchActive,
-        grab: grabActive,
+        pinch: selectorPinchActive,
+        grab: selectorGrabActive,
         selected: activeSelectedId,
         state: stageStateRef.current,
         mode: lastModeRef.current,
       });
     }
 
-    prevPinchRef.current = pinchActive;
-    prevGrabRef.current = grabActive;
+    prevPinchRef.current = selectorPinchActive;
+    prevGrabRef.current = selectorGrabActive;
   });
 
   return (
@@ -618,12 +655,17 @@ const SceneController = () => {
           onReady={registerObject}
         />
       )}
-      {placedMeshes.map((item) => (
+      {objects.map((item) => (
         <InteractiveObject
           key={item.id}
           id={item.id}
           kind={item.kind}
           position={item.position}
+          rotation={item.rotation}
+          scale={item.scale}
+          color={item.color}
+          opacity={item.opacity}
+          visible={item.visible}
           selected={selectedObjectId === item.id}
           onReady={registerObject}
         />

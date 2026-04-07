@@ -8,6 +8,11 @@ interface InteractiveObjectProps {
   selected: boolean;
   kind: MeshKind;
   position: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: [number, number, number];
+  color?: string;
+  opacity?: number;
+  visible?: boolean;
   preview?: boolean;
   onReady: (id: string, mesh: Mesh) => void;
 }
@@ -31,7 +36,7 @@ export const getMeshYOffset = (kind: MeshKind): number => {
   }
 };
 
-const meshColor = (kind: MeshKind): string => {
+export const defaultMeshColor = (kind: MeshKind): string => {
   switch (kind) {
     case 'sphere':
       return '#ff8f4c';
@@ -125,11 +130,16 @@ export const InteractiveObject = ({
   selected,
   kind,
   position,
+  rotation = [0, 0, 0],
+  scale = [1, 1, 1],
+  color,
+  opacity = 1,
+  visible = true,
   preview = false,
   onReady,
 }: InteractiveObjectProps) => {
   const meshRef = useRef<Mesh>(null);
-  const baseColor = useMemo(() => new Color(meshColor(kind)), [kind]);
+  const baseColor = useMemo(() => new Color(color ?? defaultMeshColor(kind)), [color, kind]);
 
   const register = () => {
     if (meshRef.current) {
@@ -142,18 +152,21 @@ export const InteractiveObject = ({
       color: baseColor,
       roughness: 0.28,
       metalness: 0.15,
-      transparent: preview,
-      opacity: preview ? 0.34 : 1,
+      transparent: preview || opacity < 1,
+      opacity: preview ? 0.34 : opacity,
       emissive: selected ? '#2fd6a2' : preview ? '#89d5ff' : '#000000',
       emissiveIntensity: selected ? 0.45 : preview ? 0.15 : 0,
     });
     return m;
-  }, [baseColor, preview, selected]);
+  }, [baseColor, opacity, preview, selected]);
 
   return (
     <mesh
       ref={meshRef}
       position={position}
+      rotation={rotation}
+      scale={scale}
+      visible={visible}
       material={material}
       onUpdate={register}
       userData={{ selectable: !preview, interactionId: id }}

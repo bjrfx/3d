@@ -118,6 +118,7 @@ export const SelectedMeshTooltip = () => {
           .join(' ')}
         data-selection-clear="mesh"
         aria-label="Clear selected mesh"
+        onClick={() => setSelectedMeshKind(null)}
       >
         <span aria-hidden="true">X</span>
         {clearHovered && (

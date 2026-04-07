@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { trackingRuntime } from '../tracking/runtime';
 import { useInteractionStore, type MenuTarget, type MeshKind } from '../stores/interactionStore';
+import { mapControlPointerToScreen } from '../interaction/controlPointer';
 
 interface CursorState {
   x: number;
@@ -50,6 +51,7 @@ export const FloatingMenu = () => {
   const menuSubmenuOpen = useInteractionStore((s) => s.menuSubmenuOpen);
   const selectedMeshKind = useInteractionStore((s) => s.selectedMeshKind);
   const hudVisible = useInteractionStore((s) => s.hudVisible);
+  const rightPointerMode = useInteractionStore((s) => s.rightPointerMode);
 
   const meshButtonRef = useRef<HTMLButtonElement | null>(null);
   const committedInPinchRef = useRef(false);
@@ -99,7 +101,7 @@ export const FloatingMenu = () => {
       const rightState = trackingRuntime.gestures.right;
       const pinchActive = rightState === 'PINCH' || rightState === 'TRANSFORM';
 
-      if (!menuVisible || !right) {
+      if (!menuVisible || !right || rightPointerMode !== 'control') {
         if (cursor.visible) {
           setCursor((prev) => ({ ...prev, visible: false }));
         }
@@ -115,8 +117,9 @@ export const FloatingMenu = () => {
       }
 
       const tip = right.landmarks[8] ?? right.centroid;
-      const x = (1 - tip.x) * window.innerWidth;
-      const y = tip.y * window.innerHeight;
+      const mapped = mapControlPointerToScreen(tip, window.innerWidth, window.innerHeight);
+      const x = mapped.x;
+      const y = mapped.y;
 
       setCursor({ x, y, visible: true });
 
@@ -239,6 +242,7 @@ export const FloatingMenu = () => {
   }, [
     cursor.visible,
     menuVisible,
+    rightPointerMode,
   ]);
 
   return (

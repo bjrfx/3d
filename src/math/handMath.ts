@@ -4,6 +4,8 @@ export const PINCH_ON = 0.05;
 export const PINCH_OFF = 0.08;
 export const GRAB_ON = 0.06;
 export const GRAB_OFF = 0.08;
+export const RING_PINCH_ON = 0.05;
+export const RING_PINCH_OFF = 0.075;
 
 export const clamp = (value: number, min: number, max: number): number => {
   return Math.min(max, Math.max(min, value));
